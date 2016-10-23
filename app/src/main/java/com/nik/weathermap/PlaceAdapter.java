@@ -43,6 +43,7 @@ public class PlaceAdapter extends ArrayAdapter<Place> {
         Place place = getItem(position);
 
         //Jos ei tyhjä, otetaan olion nimi ja asetetaan näyttönimeksi
+        //Jos ei tyhjä, otetaan olion nimi ja asetetaan näyttönimeksi
         if (place != null) {
             viewHolder.textView.setText(place.getName());
         }
