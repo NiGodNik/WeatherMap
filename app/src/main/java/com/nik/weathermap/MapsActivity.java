@@ -4,11 +4,15 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.location.Address;
 import android.location.Geocoder;
+import android.net.Uri;
 import android.preference.PreferenceManager;
 import android.support.design.widget.FloatingActionButton;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
@@ -18,6 +22,10 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import com.google.android.gms.appindexing.Action;
+import com.google.android.gms.appindexing.AppIndex;
+import com.google.android.gms.appindexing.Thing;
+import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -26,6 +34,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleMap
@@ -33,9 +42,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private final String TAG = this.getClass().getSimpleName();
 
-    final Context context = this;
+    private final Context context = this;
     private SharedPreferences sharedPreferences;
     private GoogleMap mMap;
+    private List<Place> placesList;
+
     private double mLatitude;
     private double mLongitude;
     private String placeName = null;
@@ -54,6 +65,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
+        placesList = readFromDB();
+
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab_maps);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -92,50 +106,69 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-
-    /**
-     * Manipulates the map once available.
-     * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     */
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
 
-//        useHomeLocation();
+        addMarkersOnMap(placesList);
 
-        // Add a marker in Sydney and move the camera
-        LatLng sydney = new LatLng(-34, 151);
-        mMap.addMarker(new MarkerOptions().position(sydney).title("Marker in Sydney"));
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
     }
 
-//    private void useHomeLocation() {
-//        Geocoder geocoder;
-//        List<Address> addressList;
-//
-//        //Get location from preferences
-//        String location = sharedPreferences.getString("Tomsk, Russia",
-//                "Tomsk, Russia");
-//        Log.d(TAG, "Location: " + location);
-//
-//        //Try getting coordinates using location name
-//        try {
-//            geocoder = new Geocoder(MapsActivity.this);
-//            addressList = geocoder.getFromLocationName(location, 1);
-//            if (addressList.size() > 0) {
-//                //Get latitude and longitude
-//                mLatitude = addressList.get(0).getLatitude();
-//                mLongitude = addressList.get(0).getLongitude();
-//            }
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-//    }
+    @Override
+    protected void onResume() {
+        super.onResume();
+//        setUpMap();
+    }
+
+    @Override
+    public void onMarkerDragStart(Marker marker) {
+        Log.d(TAG, "Drag start: " + marker.getTitle());
+    }
+
+    @Override
+    public void onMarkerDrag(Marker marker) {
+
+    }
+
+    @Override
+    public void onMarkerDragEnd(Marker marker) {
+        Log.d(TAG, "Drag end: " + marker.getTitle());
+        placeLat = String.valueOf(marker.getPosition().latitude);
+        placeLon = String.valueOf(marker.getPosition().longitude);
+        Log.d(TAG, "Updated placeLat " + placeLat + ", placeLon " + placeLon);
+        Toast.makeText(this, "Updated placeLat " + placeLat + ", placeLon " + placeLon, Toast.LENGTH_SHORT).show();
+    }
+
+    private void closeActivity() {
+        this.finish();
+    }
+
+    private void addMarkersOnMap(List<Place> listPlaces) {
+
+        double lat;
+        double lon;
+
+        Log.d(TAG, "addMarkersOnMap");
+
+        for(Place place :listPlaces){
+            try {
+                Log.d(TAG,place.getName());
+                lat = Double.parseDouble(place.getLat());
+                lon = Double.parseDouble(place.getLon());
+                LatLng coordinates = new LatLng(lat, lon);
+                Log.d(TAG,coordinates.toString());
+                mMap.addMarker(new MarkerOptions()
+                        .position(coordinates)
+                        .title(place.getName())
+                        .snippet("-10"));
+                mMap.moveCamera(CameraUpdateFactory.newLatLng(coordinates));
+                Log.d(TAG,"norm");
+            } catch (NumberFormatException e) {
+                Log.e(TAG,e.toString());
+            }
+        }
+
+    }
 
     private void saveToDB() {
         Log.d(TAG, "Saving to DB..");
@@ -167,26 +200,48 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         Log.d(TAG, "..created new row " + newRowId);
     }
 
-    @Override
-    public void onMarkerDragStart(Marker marker) {
-        Log.d(TAG, "Drag start: " + marker.getTitle());
+    private List<Place> readFromDB() {
+        Log.d(TAG, "Reading from DB");
+        List<Place> rowList = new ArrayList<>();
+
+        String[] projection = {
+                PlacesDataBase.PlacesEntry.COLUMN_NAME_TITLE,
+                PlacesDataBase.PlacesEntry.COLUMN_NAME_LAT,
+                PlacesDataBase.PlacesEntry.COLUMN_NAME_LON,
+        };
+
+        PlacesDataBase.PlacesDBHelper dbHelper = new PlacesDataBase.PlacesDBHelper(this.getBaseContext());
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+
+        Cursor cursor = db.query(
+                PlacesDataBase.PlacesEntry.TABLE_NAME,
+                projection,
+                null,
+                null,
+                null,
+                null,
+                null);
+
+        cursor.moveToFirst();
+        while (!cursor.isAfterLast()) {
+            String name = cursor.getString(cursor.getColumnIndexOrThrow(PlacesDataBase.PlacesEntry
+                    .COLUMN_NAME_TITLE));
+            String lat = cursor.getString(cursor.getColumnIndexOrThrow(PlacesDataBase.PlacesEntry
+                    .COLUMN_NAME_LAT));
+            String lon = cursor.getString(cursor.getColumnIndexOrThrow(PlacesDataBase.PlacesEntry
+                    .COLUMN_NAME_LON));
+            Place place = new Place(name, lat, lon);
+            Log.d(TAG, "Place " + place.getName() + " " + place.getLat() + " " + place.getLon());
+            rowList.add(place);
+            cursor.moveToNext();
+        }
+
+        Log.d(TAG, "Number of places:" + rowList.size());
+        cursor.close();
+        db.close();
+        dbHelper.close();
+
+        return rowList;
     }
 
-    @Override
-    public void onMarkerDrag(Marker marker) {
-
-    }
-
-    @Override
-    public void onMarkerDragEnd(Marker marker) {
-        Log.d(TAG, "Drag end: " + marker.getTitle());
-        placeLat = String.valueOf(marker.getPosition().latitude);
-        placeLon = String.valueOf(marker.getPosition().longitude);
-        Log.d(TAG, "Updated placeLat " + placeLat + ", placeLon " + placeLon);
-        Toast.makeText(this, "Updated placeLat " + placeLat + ", placeLon " + placeLon, Toast.LENGTH_SHORT).show();
-    }
-
-    private void closeActivity() {
-        this.finish();
-    }
 }

@@ -8,10 +8,6 @@ import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import java.util.List;
 
-/**
- * Created by Nik on 23.10.2016.
- */
-
 public class PlaceAdapter extends ArrayAdapter<Place> {
 
     private final String TAG = this.getClass().getSimpleName();
@@ -20,7 +16,6 @@ public class PlaceAdapter extends ArrayAdapter<Place> {
             objects) {
         super(context, resource, textViewResourceId, objects);
     }
-
 
     private static class ViewHolder {
         private TextView textView;
@@ -42,7 +37,6 @@ public class PlaceAdapter extends ArrayAdapter<Place> {
 
         Place place = getItem(position);
 
-        //Jos ei tyhjä, otetaan olion nimi ja asetetaan näyttönimeksi
         //Jos ei tyhjä, otetaan olion nimi ja asetetaan näyttönimeksi
         if (place != null) {
             viewHolder.textView.setText(place.getName());
